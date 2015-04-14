@@ -10,7 +10,7 @@
 (def watcher (atom nil))
 (def reload-channel (atom nil))
 
-(defn hello-message []
+(defn- hello-message []
   {:command "hello"
    :protocols ["http://livereload.com/protocols/official-7"
                "http://livereload.com/protocols/official-8"
@@ -19,7 +19,7 @@
                "http://livereload.com/protocols/2.x-remote-control"]
    :serverName "clj-livereload"})
 
-(defn send-reload-msg [path]
+(defn- send-reload-msg [path]
   (println "trigggered reload for path" path)
   (when (and @reload-channel (open? @reload-channel))
     (send! @reload-channel 
@@ -28,22 +28,22 @@
               :path (str "/" path)
               :liveCSS true }))))
 
-(defn cssFile? [ctx e]
+(defn- cssFile? [ctx e]
   (.contains (.getName (:file e)) "css"))
 
-(defn watch-params [paths]
+(defn- watch-params [paths]
   [{:paths [paths]
     :filter cssFile?
     :handler (fn [ctx e]
                (println "detected file change")
                (send-reload-msg (.getName (:file e))))}])
 
-(defn watch-directory [dir]
+(defn- watch-directory [dir]
   (println "starting to watch dir..")
   (when @watcher (hawk/stop! @watcher))
   (reset! watcher (hawk/watch! (watch-params dir))))
 
-(defn handle-livereload [req]
+(defn- handle-livereload [req]
   (with-channel req channel
     (reset! reload-channel channel)
     (on-receive channel 
@@ -53,7 +53,7 @@
                     (when (= "hello" (:command parsed))
                       (send! channel (json/generate-string (hello-message)))))))))
 
-(defn send-livereload-js [req]
+(defn- send-livereload-js [req]
   (-> (response (slurp "resources/livereload.js"))
       (content-type "application/javascript")))
 
@@ -67,16 +67,16 @@
 
 (defonce server (atom nil))
 
-(defn start-server []
+(defn- start-server []
   (let [port 35729]
     (->> (run-server app {:port port})
          (reset! server))))
 
-(defn stop-server
+(defn- stop-server
   "Stops the server after 100ms."
   [] (when-not (nil? @server) (@server :timeout 100) (reset! server nil)))
 
-(defn start-debug-server []
+(defn- start-debug-server []
   (->> (run-server (wrap-reload #'app '(hippo.core hippo.db))
                    {:port 35729 :join? true})
        (reset! server)))
