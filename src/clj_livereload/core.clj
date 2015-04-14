@@ -7,6 +7,7 @@
             [hawk.core :as hawk])
   (:use clojure.pprint))
 
+(def watcher (atom nil))
 (def reload-channel (atom nil))
 
 (defn hello-message []
@@ -19,11 +20,12 @@
    :serverName "clj-livereload"})
 
 (defn send-reload-msg [path]
+  (println "trigggered reload for path" path)
   (when (and @reload-channel (open? @reload-channel))
     (send! @reload-channel 
            (json/generate-string
              {:command "reload"
-              :path "/style.css"
+              :path (str "/" path)
               :liveCSS true }))))
 
 (defn cssFile? [ctx e]
@@ -33,10 +35,13 @@
   [{:paths [paths]
     :filter cssFile?
     :handler (fn [ctx e]
+               (println "detected file change")
                (send-reload-msg (.getName (:file e))))}])
 
 (defn watch-directory [dir]
-  (let [watcher (hawk/watch! (watch-params dir))]))
+  (println "starting to watch dir..")
+  (when @watcher (hawk/stop! @watcher))
+  (reset! watcher (hawk/watch! (watch-params dir))))
 
 (defn handle-livereload [req]
   (with-channel req channel
@@ -44,6 +49,7 @@
     (on-receive channel 
                 (fn [data]
                   (let [parsed (json/decode data true)]
+                    (println parsed)
                     (when (= "hello" (:command parsed))
                       (send! channel (json/generate-string (hello-message)))))))))
 
@@ -70,12 +76,13 @@
   "Stops the server after 100ms."
   [] (when-not (nil? @server) (@server :timeout 100) (reset! server nil)))
 
-(defn -main
-  "Calls [[start-server]]."
-  [& args] (start-server))
-
 (defn start-debug-server []
-  (run-server
-    (wrap-reload #'app '(hippo.core hippo.db))
-    {:port 35729 :join? true}))
+  (->> (run-server (wrap-reload #'app '(hippo.core hippo.db))
+                   {:port 35729 :join? true})
+       (reset! server)))
 
+(defn livereload [dir]
+  (when-not @server 
+    (println "starting livereload server")
+    (start-debug-server))
+  (watch-directory dir))
