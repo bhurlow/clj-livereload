@@ -28,8 +28,8 @@
               :path (str "/" path)
               :liveCSS true }))))
 
-(defn- cssFile? [ctx e]
-  (.contains (.getName (:file e)) "css"))
+(defn cssFile? [ctx e]
+  (.endsWith (.getName (:file e)) ".css"))
 
 (defn- watch-params [paths]
   [{:paths [paths]
