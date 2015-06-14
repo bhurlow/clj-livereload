@@ -54,7 +54,7 @@
                       (send! channel (json/generate-string (hello-message)))))))))
 
 (defn- send-livereload-js [req]
-  (-> (response (slurp "resources/livereload.js"))
+  (-> (resource-response "livereload.js")
       (content-type "application/javascript")))
 
 (defroutes routes
