@@ -1,5 +1,5 @@
 (ns clj-livereload.core
-  (:require [compojure.core :refer [context routes GET OPTIONS POST]]
+  (:require [compojure.core :refer [routes GET]]
             [org.httpkit.server :refer [run-server with-channel on-close on-receive send! open?]]
             [ring.middleware.reload :refer :all]
             [ring.util.response :refer :all]
@@ -18,7 +18,9 @@
 (defn css-file? [path]
   (.endsWith path ".css"))
 
-(defn send-reload-msg [state path]
+(defn send-reload-msg
+  "Given state and path, send reload message to the clients."
+  [state path]
   (info state "Reloading:" path)
   (dbug state "Sending changes to" (count (:reload-channels @state)) "clients")
   (doseq [channel (:reload-channels @state)]
@@ -30,14 +32,14 @@
                 :liveCSS true}))
       (swap! state update-in [:reload-channels disj channel]))))
 
-(defn- watch-params [state paths]
-  [{:paths [paths]
-    :handler (fn [ctx e]
-               (send-reload-msg state (.getName (:file e))))}])
-
-(defn- watch-directory [state dir]
-  (info state "Starting to watch dir..")
-  (hawk/watch! (watch-params state dir)))
+(defn- watch-directory [state paths]
+  (info state "Watching directories...")
+  (hawk/watch!
+    [{:paths paths
+      :filter hawk/file?
+      :handler (fn [ctx e]
+                 (send-reload-msg state (.getName (:file e)))
+                 ctx)}]))
 
 (defn- handle-livereload [state req]
   (with-channel req channel
@@ -77,12 +79,11 @@
    stop function to stop the server.
 
    Options:
+   - :paths    Directories to watch for changes. If empty, watch service is not used.
    - :port     Default 35729.
-   - :watch    Default true. To disable directory watching, set false.
    - :silent?  Disable output.
    - :deblug?  Enable debug output."
-  [{:keys [dir port watch]
-    :or {watch true}
+  [{:keys [paths port]
     :as opts}]
   (let [port (or port default-port)
         state (create-state opts)]
@@ -93,8 +94,8 @@
     (info state "Starting LiveReload server")
     {:state state
      :http-kit (run-server (handler state) {:port port})
-     :watch (if watch
-              (watch-directory state dir))}))
+     :watch (if (seq paths)
+              (watch-directory state paths))}))
 
 (defn stop
   "Stop the http-server and watch service."
