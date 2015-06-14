@@ -1,14 +1,10 @@
 (ns clj-livereload.core
-  (:require [compojure.core :refer [context defroutes GET OPTIONS POST]]
+  (:require [compojure.core :refer [context routes GET OPTIONS POST]]
             [org.httpkit.server :refer [run-server with-channel on-close on-receive send! open?]]
             [ring.middleware.reload :refer :all]
             [ring.util.response :refer :all]
             [cheshire.core :as json]
-            [hawk.core :as hawk])
-  (:use clojure.pprint))
-
-(def watcher (atom nil))
-(def reload-channel (atom nil))
+            [hawk.core :as hawk]))
 
 (defn- hello-message []
   {:command "hello"
@@ -19,71 +15,81 @@
                "http://livereload.com/protocols/2.x-remote-control"]
    :serverName "clj-livereload"})
 
-(defn- send-reload-msg [path]
+(defn css-file? [path]
+  (.endsWith path ".css"))
+
+(defn send-reload-msg [state path]
   (println "trigggered reload for path" path)
-  (when (and @reload-channel (open? @reload-channel))
-    (send! @reload-channel 
-           (json/generate-string
-             {:command "reload"
-              :path (str "/" path)
-              :liveCSS true }))))
+  (doseq [channel (:reload-channels @state)]
+    (if (open? channel)
+      (send! channel
+             (json/generate-string
+               {:command "reload"
+                :path (str "/" path)
+                :liveCSS (css-file? path)}))
+      (swap! state update-in [:reload-channels disj channel]))))
 
-(defn cssFile? [ctx e]
-  (.endsWith (.getName (:file e)) ".css"))
-
-(defn- watch-params [paths]
+(defn- watch-params [state paths]
   [{:paths [paths]
-    :filter cssFile?
     :handler (fn [ctx e]
                (println "detected file change")
-               (send-reload-msg (.getName (:file e))))}])
+               (send-reload-msg state (.getName (:file e))))}])
 
-(defn- watch-directory [dir]
+(defn- watch-directory [state dir]
   (println "starting to watch dir..")
-  (when @watcher (hawk/stop! @watcher))
-  (reset! watcher (hawk/watch! (watch-params dir))))
+  (hawk/watch! (watch-params state dir)))
 
-(defn- handle-livereload [req]
+(defn- handle-livereload [state req]
   (with-channel req channel
-    (reset! reload-channel channel)
-    (on-receive channel 
-                (fn [data]
-                  (let [parsed (json/decode data true)]
-                    (println parsed)
-                    (case (:command parsed)
-                      "hello" (send! channel (json/generate-string (hello-message)))
-                      nil))))))
+    (swap! state update-in [:reload-channels] conj channel)
+    (on-receive
+      channel
+      (fn [data]
+        (let [parsed (json/decode data true)]
+          (println parsed)
+          (case (:command parsed)
+            "hello" (send! channel (json/generate-string (hello-message)))
+            nil))))
+    (on-close
+      channel
+      (fn [_]
+        (swap! state update-in [:reload-channels] disj channel)))))
 
-(defn- send-livereload-js [req]
-  (-> (resource-response "livereload.js")
-      (content-type "application/javascript")))
+(defn- handler [state]
+  (routes
+    (GET "/livereload.js" req
+      (-> (resource-response "livereload.js")
+          (content-type "application/javascript")))
+    (GET "/livereload" req
+      (handle-livereload state req))))
 
-(defroutes routes
-  (GET "/livereload.js" req (send-livereload-js req))
-  (GET "/livereload" req (handle-livereload req))
-  (GET "/style.css*" req (resource-response "style.css"))
-  (GET "/" req (resource-response "index.html")))
+(defn create-state
+  "Creates the state holding open websocket connections."
+  []
+  (atom {:reload-channels #{}}))
 
-(def app (-> #'routes))
+(defn start
+  "Starts the http-server and (by default) watch service.
+   Returns a map containg the server state. It can be passed to
+   stop function to stop the server.
 
-(defonce server (atom nil))
+   Options:
+   - :port     Default 35729.
+   - :watch    Default true. To disable directory watching, set false."
+  [{:keys [dir port watch]
+    :or {watch true}}]
+  (let [state (create-state)]
+    (println "starting LiveReload server")
+    {:state state
+     :http-kit (run-server (handler state) {:port (or port 35729)})
+     :watch (if watch
+              (watch-directory state dir))}))
 
-(defn- start-server []
-  (let [port 35729]
-    (->> (run-server app {:port port})
-         (reset! server))))
-
-(defn- stop-server
-  "Stops the server after 100ms."
-  [] (when-not (nil? @server) (@server :timeout 100) (reset! server nil)))
-
-(defn- start-debug-server []
-  (->> (run-server (wrap-reload #'app '(hippo.core hippo.db))
-                   {:port 35729 :join? true})
-       (reset! server)))
-
-(defn livereload [dir]
-  (when-not @server 
-    (println "starting livereload server")
-    (start-debug-server))
-  (watch-directory dir))
+(defn stop
+  "Stop the http-server and watch service."
+  [server]
+  (if-let [watch (:watch server)]
+    (hawk/stop! watch))
+  (if-let [http-kit (:http-kit server)]
+    (http-kit :timeout 100))
+  nil)
