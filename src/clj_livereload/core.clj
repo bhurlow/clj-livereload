@@ -50,8 +50,9 @@
                 (fn [data]
                   (let [parsed (json/decode data true)]
                     (println parsed)
-                    (when (= "hello" (:command parsed))
-                      (send! channel (json/generate-string (hello-message)))))))))
+                    (case (:command parsed)
+                      "hello" (send! channel (json/generate-string (hello-message)))
+                      nil))))))
 
 (defn- send-livereload-js [req]
   (-> (resource-response "livereload.js")
