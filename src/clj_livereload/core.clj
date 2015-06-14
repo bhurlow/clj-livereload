@@ -26,7 +26,7 @@
              (json/generate-string
                {:command "reload"
                 :path (str "/" path)
-                :liveCSS (css-file? path)}))
+                :liveCSS true}))
       (swap! state update-in [:reload-channels disj channel]))))
 
 (defn- watch-params [state paths]
@@ -58,7 +58,7 @@
 (defn- handler [state]
   (routes
     (GET "/livereload.js" req
-      (-> (resource-response "livereload.js")
+      (-> (resource-response "META-INF/resources/webjars/livereload-js/2.2.2/dist/livereload.js" {:root ""})
           (content-type "application/javascript")))
     (GET "/livereload" req
       (handle-livereload state req))))
