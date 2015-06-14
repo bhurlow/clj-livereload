@@ -15,9 +15,6 @@
    :protocols ["http://livereload.com/protocols/official-7"]
    :serverName "clj-livereload"})
 
-(defn css-file? [path]
-  (.endsWith path ".css"))
-
 (defn send-reload-msg
   "Given state and path, send reload message to the clients."
   [state path]
