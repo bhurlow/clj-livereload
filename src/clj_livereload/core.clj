@@ -86,7 +86,7 @@
         state (create-state opts)]
     (when-not (= port default-port)
       (println "Warn: LiveReload port is not standard (%s). You are listening on %d." default-port port)
-      (println "You'll need to rely on the LiveReload snipper")
+      (println "You'll need to rely on the LiveReload snippet")
       (println "> http://feedback.livereload.com/knowledgebase/articles/86180-how-do-i-add-the-script-tag-manually-"))
     (info state "Starting LiveReload server")
     {:state state
