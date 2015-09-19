@@ -1,6 +1,5 @@
 (ns clj-livereload.core
-  (:require [compojure.core :refer [routes GET]]
-            [org.httpkit.server :refer [run-server with-channel on-close on-receive send! open?]]
+  (:require [org.httpkit.server :refer [run-server with-channel on-close on-receive send! open?]]
             [ring.middleware.reload :refer :all]
             [ring.util.response :refer :all]
             [cheshire.core :as json]
@@ -55,12 +54,15 @@
         (swap! state update-in [:reload-channels] disj channel)))))
 
 (defn- handler [state]
-  (routes
-    (GET "/livereload.js" req
-      (-> (resource-response "META-INF/resources/webjars/livereload-js/2.2.2/dist/livereload.js" {:root ""})
-          (content-type "application/javascript")))
-    (GET "/livereload" req
-      (handle-livereload state req))))
+  (fn [req]
+    (if (= :get (:request-method req))
+      (case (:uri req)
+        "/livereload.js"
+        (-> (resource-response "META-INF/resources/webjars/livereload-js/2.2.2/dist/livereload.js" {:root ""})
+            (content-type "application/javascript"))
+        "/livereload"
+        (handle-livereload state req)
+        nil))))
 
 (defn create-state
   "Creates the state holding open websocket connections."
