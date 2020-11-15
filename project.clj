@@ -7,7 +7,7 @@
                  [cheshire "5.4.0"]
                  [ring "1.3.1"]
                  [compojure "1.2.1"]
-                 [http-kit "2.1.19"]
+                 [http-kit "2.5.0"]
                  [hawk "0.2.4"]
                  [org.webjars.npm/livereload-js "2.2.2"]]
   :profiles {:example {:resource-paths ["example-resources"]
